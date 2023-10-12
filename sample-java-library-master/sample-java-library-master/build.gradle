@@ -1,0 +1,30 @@
+plugins {
+    id "org.shipkit.java" version "2.1.3"
+    id "idea"
+}
+
+allprojects {
+    group = "com.sample.java.library"
+
+    repositories {
+        jcenter()
+    }
+
+    plugins.withId('maven-publish') {
+        publishing {
+            repositories {
+                maven {
+                    url = "$buildDir/repo"
+                }
+            }
+        }
+
+        task publishToLocalRepo(type: Copy) {
+            dependsOn "publish"
+            from "$buildDir/repo"
+            into "${System.getProperty('user.home')}/local-repo"
+        }
+
+        tasks.clean.dependsOn "cleanPublishToLocalRepo"
+    }
+}

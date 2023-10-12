@@ -1,0 +1,111 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'idea'
+}
+
+configurations {
+    testUtil
+    dataModel
+}
+
+sourceSets {
+    dataModel {
+        //to demonstrate a publication with a separate pom file
+        java {
+            srcDirs = ['src/dataModel/java']
+        }
+    }
+
+    testUtil {
+        //to demonstrate a publication with a classifier
+        compileClasspath += configurations.testCompile
+        java {
+            srcDirs = ['src/testUtil/java']
+        }
+    }
+
+    test {
+        compileClasspath += sourceSets.testUtil.output
+        runtimeClasspath += sourceSets.testUtil.output
+    }
+}
+
+dependencies {
+    api project(":api")
+    api 'org.apache.commons:commons-math3:3.6.1'
+    implementation 'com.google.guava:guava:23.0'
+
+    testImplementation 'junit:junit:4.12'
+}
+
+task testUtilJar(type: Jar) {
+    from sourceSets.testUtil.output
+    classifier 'testUtil'
+}
+
+task dataModelJar(type: Jar) {
+    from sourceSets.dataModel.output
+    baseName 'impl-data-model'
+}
+
+artifacts {
+    testUtil testUtilJar
+}
+
+publishing {
+    publications {
+        javaLibrary {
+            // this publication is preconfigured with Shipkit plugin,
+            // we just need to add an extra artifact that has a different classifier
+            artifact tasks.testUtilJar
+        }
+
+        dataModel(MavenPublication) {
+            artifactId 'impl-data-model'
+            artifact tasks.dataModelJar
+
+            //pom xml workaround needed because of: https://github.com/gradle/gradle/issues/1061
+            pom.withXml {
+                def node = asNode().appendNode('dependencies')
+                def used = new HashSet()
+                def addDependency = { group, artifact, ver, scope ->
+                    if (used.add("$group:$name:$ver")) {
+                        def n = node.appendNode('dependency')
+                        n.appendNode('groupId', group)
+                        n.appendNode('artifactId', artifact)
+                        n.appendNode('version', ver)
+                        n.appendNode('scope', scope)
+                    }
+                }
+
+                //based on: https://docs.gradle.org/current/userguide/java_library_plugin.html#sec:java_library_separation
+                def scopes = [
+                    provided: ['compileOnly'],
+                    compile: ['runtimeOnly', 'api'],
+                    runtime: ['implementation'],
+                    test: ['testCompileOnly', 'testImplementation', 'testRuntimeOnly'],
+                ]
+
+                scopes.each { scope, configs ->
+                    configs.each { conf ->
+                        project.configurations[conf].allDependencies.each {
+                            addDependency(it.group, it.name, it.version, scope)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+bintray {
+    publications += ['dataModel']
+}
+
+idea {
+    module {
+        sourceDirs += file('src/dataModel/java')
+        sourceDirs += file('src/testUtil/java')
+    }
+}
